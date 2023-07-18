@@ -1,0 +1,208 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+```{r}
+library(readr)
+annual_flow <- read_csv("annual flows for Colorado River 1911-1972.csv")
+library(urca)
+```
+The data "annual flows for Colorado River 1911-1972.csv" contains the annual for of Colorado river from 1911 to 1972. The dataset has two features: Year and Flow.
+
+```{r}
+flow_ts <- ts(data= annual_flow$flow, start = 1911)
+plot(flow_ts)
+acf(flow_ts)
+pacf(flow_ts)
+
+flow_ur <- ur.df(flow_ts, type= 'none', lags=0, )
+summary(flow_ur)
+```
+The data looks somewhat not stationary enough, so we can conduct a Dickey-Fuller test to see if the time series is stationary or not. The null hypothesis is that a unit root is present.
+If a unit root is present, then p > 0, and the process is not stationary. Otherwise, p = 0, the null hypothesis is rejected, and the process is considered to be stationary.
+The Dickey-Fuller test resulted a p-value of 0.1008, which is very close to 0. This indicates that the time series is stationary.
+
+Additionally, the ACF spikes die off and there are 3 significant spikes from PACF plot suggest an AR(3). The spikes from the ACF plot die off after lag 5, so I would also try to fit MA(5) and MA(3).
+
+```{r}
+flow_ar <- arima(flow_ts, order = c(3,0,0))
+plot(flow_ar$residuals)
+acf(flow_ar$residuals)
+pacf(flow_ar$residuals)
+
+```
+The ACF and PACF of the residuals suggest that we've accounted for most of the variance. 
+
+```{r}
+flow_am5 <- arima(flow_ts, order = c(0,0,5))
+plot(flow_am5$residuals)
+acf(flow_am5$residuals)
+pacf(flow_am5$residuals)
+
+flow_am3 <- arima(flow_ts, order = c(0,0,3))
+plot(flow_am3$residuals)
+acf(flow_am3$residuals)
+pacf(flow_am3$residuals)
+```
+```{r}
+flow_ar
+flow_am5
+flow_am3
+```
+The three models perform very similarly, with AIC score ranges around 380. The residual plots of the three models also show that we've accounted for most of the variance. Therefore, all AR(3), MA(3), MA(5) can be considered for this dataset.
+
+# quarterly-production-of-clay-bricks.csv
+
+```{r}
+bricks <- read_csv("quarterly-production-of-clay-bricks.csv")
+bricks_ts <-  ts(data = bricks$bricks, start =c(1956,1), freq = 4)
+```
+The "quarterly-production-of-clay-bricks.csv" file contains the production of clay bricks every quarter from 1956 to 1994. The dataset contains 155 observations and has three 3 columns: year, qtr, and bricks 
+
+```{r}
+plot(bricks_ts)
+acf(bricks_ts, lag=60)
+pacf(bricks_ts, lag=60)
+```
+Notice that the data indicates an overall upward trend. It is reasonable that the production of clay bricks would increase over time and thus a regression model might be useful. However, if we focus on stochastic models, we will most likely need to utilize the first difference. We will look take the regression approach in this example. The trend could be deterministic (“time” is an explanatory variable) with the model possibilities of linear, quadratic or exponential or it could be stochastic where differencing will be appropriate.
+
+```{r}
+bricks_ur <- ur.df(bricks_ts, type='trend', lags=0)
+summary(bricks_ur)
+```
+The p-value of time trend ("tt") are very small (0.0093) and with the visual evidence, it is reasonable to start using linear regression for this trend. 
+
+```{r}
+bricks$id <-  cbind(ID = 1:nrow(bricks)) 
+t <- bricks$id
+bricks_lin <- lm(bricks_ts~t)
+summary(bricks_lin)
+```
+
+```{r}
+plot(bricks_lin$residuals)
+acf(bricks_lin$residuals)
+pacf(bricks_lin$residuals)
+```
+The R-squared value from the linear regression is 0.58 that indicates 58% of the variation in the y values is accounted for by the x values. Addtionally, the ACF and PACF appear to show that we have explained only about half of the variation. Thus, we are moving to quadratic model. 
+
+
+```{r}
+t_sq <- t^2 
+bricks_quad <- lm(bricks_ts~t+t_sq) 
+summary(bricks_quad)
+
+plot(bricks_quad$residuals)
+
+```
+The R-squared of the quadratic model is 0.81, which means the model is able to explain up to 81% of the variance. The residual plot shows a very random pattern and the variability goes up as time increases. The result is relatively high, but we will look at its ACF and PACF:
+
+```{r}
+acf(bricks_quad$residuals)
+pacf(bricks_quad$residuals)
+```
+Notice that both of these show consistent spikes every 4 lags (quarters) indicating a seasonal effect. Since we have gone down the road of a regression model and it is reasonable that the bricks' production would gave a seasonal effect, we will adapt our regression model to include the seasonality adjustment.
+
+```{r}
+qtr <- factor(bricks$qtr)
+bricks_reg <- lm(bricks_ts~t+t_sq+qtr)
+summary(bricks_reg)
+```
+The R-squared of the quadratic model with seasonality adjustment increases to 85.5%. The new model did not dramatically improve the r-squared value, however, when we look at the residuals, ACF and PACF of the residuals, we see that we have significantly improved the model
+
+```{r}
+acf(bricks_reg$residuals)
+pacf(bricks_reg$residuals)
+```
+We’ve gone about as far as we can with the regression model. Now we will model the residuals with a stochastic model. From the ACF and PACF we can see that we have removed the majority of the seasonal component and are left with AR(1) and MA(4) models (1 significant spike at lag 1 on the PACF and an ACF that dies off after lag 4. We will now fit AR(1), MA(4), and ARMA(1,4) models to the residuals of the regression model.
+
+```{r}
+bricks_reg_ar1 <- arima(bricks_reg$residuals, order=c(1,0,0))
+plot(bricks_reg_ar1$residuals)
+acf(bricks_reg_ar1$residuals)
+pacf(bricks_reg_ar1$residuals)
+
+bricks_reg_ma4 <- arima(bricks_reg$residuals, order=c(0,0,4))
+plot(bricks_reg_ma4$residuals)
+acf(bricks_reg_ma4$residuals)
+pacf(bricks_reg_ma4$residuals)
+
+
+bricks_reg_arma <- arima(bricks_reg$residuals, order=c(1,0,4))
+plot(bricks_reg_arma$residuals)
+acf(bricks_reg_arma$residuals)
+pacf(bricks_reg_arma$residuals)
+```
+
+Based on the ACF and PACF plots of the residuals from the three models, the mixed model - ARMA(1,4) performs the best as all the spikes are insignificant, which indicates no pattern left in the residuals. 
+
+# CO2 ppm Mauno Loa
+
+```{r}
+co2 <- read_csv("co2-ppm-mauna-loa-1965-1980.csv")
+co2_ts <- ts(data = co2$co2, start =c(1965,1), freq = 12)
+```
+
+The csv file "co2-ppm-mauna-loa-1965-1980.csv" contains the amount of CO2 in Mauna Loa, Hawaii in ppm. The data was collected monthly from 1965 to 1980. The data set has 3 features: year, month, and co2.
+
+```{r}
+plot(co2_ts)
+acf(co2_ts, lag =60)
+pacf(co2_ts, lag=60)
+```
+Take note of the format of the ACF and PACF graphs. The “lag=60” portion of the ACF and PACF command expands the number of lags displayed in the graph. The autocorrelation plot shows a seasonal trend and the curve is going upward over time. However, to verify that the data is stationary, I still conduct the Dickey-Fuller test to check its p-value. 
+
+
+```{r}
+co2_ur <- ur.df(co2_ts,type = 'none', lags = 0)
+summary(co2_ur)
+```
+The p-value of resulted from the Dickey-Fuller test is 0.2438, which is relatively close to 0. Based on the autocorrelation plot and the small p-value, it is appropriate to conclude that the time series is stationary. 
+
+Tail-off is observed from the ACF plot that is an indication of AR model. From PACF, the two significant spikes are at lag 1 and lag 13 (12 lags apart), which indicates a potential SAR1 (seasonal moving average model of order 1). 
+
+```{r}
+co2_sar1 <- arima(co2_ts, order=c(0,0,0), seasonal=list(order=c(1,0,0), freq=12))
+co2_sar1_res <- co2_sar1$residuals
+plot(co2_sar1_res)
+acf(co2_sar1_res, lag=60)
+pacf(co2_sar1_res, lag=60)
+```
+
+Here, there is an exponential decay from ACF plot that is also a sign an AR model may be appropriate. The PACF has two significant spikes at lag 1 and 13, indicating the residuals might follow an AR(1)model. 
+
+
+```{r}
+co2_model1 <- arima(co2_ts, order = c(1,0,0), seasonal = list(order=c(1,0,0), freq=12))
+plot(co2_model1$residual)
+acf(co2_model1$residual)
+pacf(co2_model1$residual)
+```
+The ACF has one significant spike at lag 1. Similarly, PACF plot shows 1 significant spike at lag 1. This indicates that we account for some of the variation.  
+Now we will turn our attention to purely stochastic models to see if we can determine any other reasonable models.
+From our original plots, we know we need to account for trends. We do that by differencing the data
+
+
+```{r}
+co2_dff <- diff(co2_ts)
+plot(co2_dff)
+acf(co2_dff)
+pacf(co2_dff)
+```
+
+We again see some concerning signs of conditional heteroskedasticity in the plot but will check again after we account for seasonality. The ACF and PACF show strong indications of seasonality (consistent spikes every 4 lags). Looking at the PACF, it looks like we have a significant spike at lag 4 indicating an AR(4) for the non-seasonal component and we have a marginally significant spike at lag 8 (2 seasons) indicating a possible seasonal AR(2) model.
+
+```{r}
+co2_ari41_sar2 <- arima(co2_ts, order=c(4,1,0), seasonal=list(order=c(2,0,0), frequency=4))
+co2_ari41_sar2
+acf(co2_ari41_sar2$residuals)
+pacf(co2_ari41_sar2$residuals)
+
+co2_ari21_sar2 <- arima(co2_ts, order=c(2,1,0), seasonal=list(order=c(2,0,0), frequency=4))
+co2_ari21_sar2
+acf(co2_ari21_sar2$residuals)
+pacf(co2_ari21_sar2$residuals)
+```
+Since only significant spikes in ACF and PACF are at late lags and are marginally significant,it looks like we have explained as much variation as possible with model AR(4) with seasonality AR(2).
+
