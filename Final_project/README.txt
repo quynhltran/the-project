@@ -1,5 +1,6 @@
 README.txt
 
+This project is abbout Credit card approval prediction. Scripted in Python using Scikitlearn packages
 The zip file contains:
 - A pdf of the report
 - Source code final_project.py
