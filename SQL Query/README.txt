@@ -1,5 +1,8 @@
 A single Python file: test_run.py
 
+This project is about data normalization and creating SQL query
+
+
 Call create_tables() to create 11 relations
      insert_to_tables() to have data inserted into 11 relations
      query(question_num) with question_num is an int to run the query and have output printed out 
